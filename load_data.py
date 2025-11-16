@@ -69,6 +69,9 @@ else:
         "hourly": "temperature_2m"
     }
 
+    # Define merged_df in this scope so Section 4 can access it
+    merged_df = None 
+
     try:
         response = requests.get(API_URL, params=params)
         response.raise_for_status()  # Raises an error for bad responses (4xx or 5xx)
@@ -117,39 +120,65 @@ else:
     except Exception as e:
         print(f"An error occurred during historical weather processing: {e}")
 
-    # --- 4. Fetching Today's Weather ---
-    print("\n--- 4. Fetching Today's Weather ---")
-    print("Fetching current temperature from Open-Meteo Forecast API...")
+    # --- 4. Fetching Yesterday, Today, & Tomorrow's Temperatures ---
+    print("\n--- 4. Fetching Yesterday, Today, & Tomorrow's Temperatures ---")
+    print("Fetching 3-day temperature data from Open-Meteo Forecast API...")
     
-    FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast"
+    FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast" # Corrected typo
     forecast_params = {
         "latitude": 39.95,  # Philadelphia
         "longitude": -75.16, # Philadelphia
-        "current": "temperature_2m",
-        "timezone": "America/New_York" # Use a specific timezone for consistency
+        "daily": "temperature_2m_mean",     # Get daily mean temp
+        "past_days": 1,                     # Get yesterday's observed data
+        "forecast_days": 2,                 # Get today and tomorrow's data
+        "timezone": "America/New_York"      # Use a specific timezone for consistency
     }
 
     try:
         response = requests.get(FORECAST_API_URL, params=forecast_params)
         response.raise_for_status()
-        today_weather = response.json()
+        three_day_data = response.json()
+
+        # --- Process 3-Day Forecast ---
+        daily_data = three_day_data.get('daily', {})
         
-        current_temp = today_weather.get('current', {}).get('temperature_2m')
-        current_time = today_weather.get('current', {}).get('time')
-        
-        if current_temp is not None and current_time is not None:
-            print(f"Successfully fetched current weather:")
-            print(f"  - Time: {current_time}")
-            print(f"  - Temperature: {current_temp}°C")
+        if not daily_data or 'time' not in daily_data or len(daily_data['time']) < 3:
+            print("\nError: Could not retrieve the 3-day data from forecast response.")
         else:
-            print("Error: 'current' or 'temperature_2m' not found in forecast response.")
+            # Create a DataFrame from the daily forecast data
+            daily_df = pd.DataFrame(daily_data)
+            
+            # Extract the 3 temperatures
+            yesterday_temp = daily_df['temperature_2m_mean'][0]
+            today_temp = daily_df['temperature_2m_mean'][1]
+            tomorrow_temp = daily_df['temperature_2m_mean'][2]
+
+            print("\nSuccessfully fetched 3-day temperature data:")
+            print(f"  - Yesterday (Observed):    {yesterday_temp}°C")
+            print(f"  - Today (Observed/Fcst): {today_temp}°C")
+            print(f"  - Tomorrow (Forecast):   {tomorrow_temp}°C")
+
+            # --- Append to the merged_df from Section 3 ---
+            if merged_df is not None:
+                print(f"\nAppending 3-day temperatures as new columns to the merged DataFrame...")
+                
+                merged_df['yesterday_observed_mean_temp'] = yesterday_temp
+                merged_df['today_forecast_mean_temp'] = today_temp
+                merged_df['tomorrow_forecast_mean_temp'] = tomorrow_temp
+                
+                print("Successfully added new columns. Tail of the final DataFrame:")
+                print(merged_df.tail())
+            else:
+                print("\n'merged_df' was not created (likely due to an error in Section 3), skipping append.")
+                # Just print the 3-day data if we can't append it
+                print(daily_df.to_string()) # .to_string() ensures it prints nicely formatted
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching current weather data: {e}")
+        print(f"\nError fetching 3-day forecast data: {e}")
     except json.JSONDecodeError:
-        print("Error: Could not decode JSON response from forecast API.")
+        print("\nError: Could not decode JSON response from forecast API.")
     except Exception as e:
-        print(f"An error occurred during current weather processing: {e}")
+        print(f"\nAn error occurred during 3-day forecast processing: {e}")
 
 
 print("\n--- Python script execution finished. ---")
