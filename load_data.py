@@ -3,6 +3,7 @@ import glob
 import os
 import requests  # For making API calls
 import json
+from datetime import datetime
 
 # --- 1. Loading CSV data from OSF file ---
 print("--- 1. Loading CSV data from OSF file ---")
@@ -55,9 +56,10 @@ else:
     
     # Format dates for the API (YYYY-MM-DD)
     start_str = min_date.strftime('%Y-%m-%d')
-    end_str = max_date.strftime('%Y-%m-%d')
+    # Add one day to the end_date to make sure we can get the t+24h for the last row
+    end_str = (max_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
     
-    print(f"Date range found in CSVs: {start_str} to {end_str}")
+    print(f"Date range found in CSVs (with +1 day buffer): {start_str} to {end_str}")
     print("Fetching corresponding weather data from Open-Meteo...")
 
     API_URL = "https://archive-api.open-meteo.com/v1/archive"
@@ -78,8 +80,8 @@ else:
         weather_data = response.json()
         print("Successfully fetched and parsed historical weather data.")
 
-        # --- 3. Process and Merge Weather Data ---
-        print("\n--- 3. Processing and Merging Weather Data ---")
+        # --- 3. Process and Merge Historical Data (For Model Training) ---
+        print("\n--- 3. Processing and Merging Historical Data (For Model Training) ---")
 
         # Load weather data into a DataFrame
         hourly_data = weather_data.get('hourly', {})
@@ -90,8 +92,19 @@ else:
             weather_df = pd.DataFrame(hourly_data)
             weather_df['time'] = pd.to_datetime(weather_df['time'])
             weather_df = weather_df.set_index('time')
-            print("Created historical weather DataFrame. Head:")
-            print(weather_df.head())
+
+            # --- This is the training data logic ---
+            # 1. Rename the main temperature column
+            weather_df = weather_df.rename(columns={'temperature_2m': 'temp_at_time_t'})
+            
+            # 2. Create 'yesterday's temp' (temp at t - 24 hours)
+            weather_df['temp_at_time_t_minus_24h'] = weather_df['temp_at_time_t'].shift(24)
+            
+            # 3. Create 'tomorrow's temp' (temp at t + 24 hours) - THIS IS HISTORICAL GROUND TRUTH
+            weather_df['temp_at_time_t_plus_24h_OBSERVED'] = weather_df['temp_at_time_t'].shift(-24)
+            
+            print("Created historical weather DataFrame with relative columns (Head):")
+            print(weather_df.head(5))
 
             # Now, let's merge this weather data back into your original CSVs
             # We'll just show an example using the first DataFrame
@@ -110,8 +123,12 @@ else:
             # 'how=left' keeps all your original data.
             merged_df = original_df.merge(weather_df, left_index=True, right_index=True, how='left')
             
-            print("Merged DataFrame (head):")
+            print("Merged Historical Training DataFrame (Head):")
             print(merged_df.head())
+            
+            print("\nMerged Historical Training DataFrame (Tail):")
+            print(merged_df.tail())
+
 
     except requests.exceptions.RequestException as e:
         print(f"Error fetching historical weather data: {e}")
@@ -120,65 +137,57 @@ else:
     except Exception as e:
         print(f"An error occurred during historical weather processing: {e}")
 
-    # --- 4. Fetching Yesterday, Today, & Tomorrow's Temperatures ---
-    print("\n--- 4. Fetching Yesterday, Today, & Tomorrow's Temperatures ---")
-    print("Fetching 3-day temperature data from Open-Meteo Forecast API...")
+    # --- 4. Fetching "Live" Data for New Predictions ---
+    print("\n--- 4. Fetching 'Live' Data for New Predictions (Yesterday, Today, Tomorrow Forecast) ---")
     
-    FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast" # Corrected typo
+    FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast"
     forecast_params = {
-        "latitude": 39.95,  # Philadelphia
-        "longitude": -75.16, # Philadelphia
-        "daily": "temperature_2m_mean",     # Get daily mean temp
-        "past_days": 1,                     # Get yesterday's observed data
-        "forecast_days": 2,                 # Get today and tomorrow's data
-        "timezone": "America/New_York"      # Use a specific timezone for consistency
+        "latitude": 39.95,
+        "longitude": -75.16,
+        "hourly": "temperature_2m",
+        "past_days": 1,       # Get yesterday's observed data
+        "forecast_days": 2,   # Get today and tomorrow's data
+        "timezone": "America/New_York"
     }
 
     try:
         response = requests.get(FORECAST_API_URL, params=forecast_params)
         response.raise_for_status()
-        three_day_data = response.json()
-
-        # --- Process 3-Day Forecast ---
-        daily_data = three_day_data.get('daily', {})
+        live_data = response.json()
         
-        if not daily_data or 'time' not in daily_data or len(daily_data['time']) < 3:
-            print("\nError: Could not retrieve the 3-day data from forecast response.")
+        hourly_live = live_data.get('hourly', {})
+        
+        if not hourly_live or 'time' not in hourly_live or len(hourly_live['time']) < 72:
+            print("Error: Could not retrieve full 72 hours of data for live prediction.")
         else:
-            # Create a DataFrame from the daily forecast data
-            daily_df = pd.DataFrame(daily_data)
+            live_weather_df = pd.DataFrame(hourly_live)
+            live_weather_df['time'] = pd.to_datetime(live_weather_df['time'])
+            live_weather_df = live_weather_df.set_index('time')
             
-            # Extract the 3 temperatures
-            yesterday_temp = daily_df['temperature_2m_mean'][0]
-            today_temp = daily_df['temperature_2m_mean'][1]
-            tomorrow_temp = daily_df['temperature_2m_mean'][2]
-
-            print("\nSuccessfully fetched 3-day temperature data:")
-            print(f"  - Yesterday (Observed):    {yesterday_temp}°C")
-            print(f"  - Today (Observed/Fcst): {today_temp}°C")
-            print(f"  - Tomorrow (Forecast):   {tomorrow_temp}°C")
-
-            # --- Append to the merged_df from Section 3 ---
-            if merged_df is not None:
-                print(f"\nAppending 3-day temperatures as new columns to the merged DataFrame...")
-                
-                merged_df['yesterday_observed_mean_temp'] = yesterday_temp
-                merged_df['today_forecast_mean_temp'] = today_temp
-                merged_df['tomorrow_forecast_mean_temp'] = tomorrow_temp
-                
-                print("Successfully added new columns. Tail of the final DataFrame:")
-                print(merged_df.tail())
-            else:
-                print("\n'merged_df' was not created (likely due to an error in Section 3), skipping append.")
-                # Just print the 3-day data if we can't append it
-                print(daily_df.to_string()) # .to_string() ensures it prints nicely formatted
+            # This DataFrame contains data for yesterday, today, and tomorrow.
+            # We only care about the rows for "today" to make predictions.
+            
+            # Create the 3 columns you want
+            # temp_at_time_t
+            # temp_at_time_t_minus_24h (shift 24)
+            # temp_at_time_t_plus_24h_FORECAST (shift -24)
+            
+            live_weather_df = live_weather_df.rename(columns={'temperature_2m': 'temp_at_time_t'})
+            live_weather_df['temp_at_time_t_minus_24h'] = live_weather_df['temp_at_time_t'].shift(24)
+            live_weather_df['temp_at_time_t_plus_24h_FORECAST'] = live_weather_df['temp_at_time_t'].shift(-24)
+            
+            # The data for "today" (Nov 16, 2025) will have all 3 columns populated.
+            # Let's filter to just the 24 hours for today.
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            live_prediction_df = live_weather_df.loc[today_str].copy()
+            
+            print(f"\nSuccessfully created 'Live Prediction' DataFrame for: {today_str}")
+            print(live_prediction_df.to_string())
 
     except requests.exceptions.RequestException as e:
-        print(f"\nError fetching 3-day forecast data: {e}")
-    except json.JSONDecodeError:
-        print("\nError: Could not decode JSON response from forecast API.")
+        print(f"\nError fetching live forecast data: {e}")
     except Exception as e:
-        print(f"\nAn error occurred during 3-day forecast processing: {e}")
+        print(f"\nAn error occurred during live data processing: {e}")
 
 
 print("\n--- Python script execution finished. ---")
