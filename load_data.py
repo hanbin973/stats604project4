@@ -73,7 +73,7 @@ else:
         response = requests.get(API_URL, params=params)
         response.raise_for_status()  # Raises an error for bad responses (4xx or 5xx)
         weather_data = response.json()
-        print("Successfully fetched and parsed weather data.")
+        print("Successfully fetched and parsed historical weather data.")
 
         # --- 3. Process and Merge Weather Data ---
         print("\n--- 3. Processing and Merging Weather Data ---")
@@ -81,13 +81,13 @@ else:
         # Load weather data into a DataFrame
         hourly_data = weather_data.get('hourly', {})
         if not hourly_data:
-            print("Error: No 'hourly' data found in API response.")
+            print("Error: No 'hourly' data found in historical API response.")
         else:
             # Create a clean, time-indexed DataFrame for the weather
             weather_df = pd.DataFrame(hourly_data)
             weather_df['time'] = pd.to_datetime(weather_df['time'])
             weather_df = weather_df.set_index('time')
-            print("Created weather DataFrame. Head:")
+            print("Created historical weather DataFrame. Head:")
             print(weather_df.head())
 
             # Now, let's merge this weather data back into your original CSVs
@@ -96,7 +96,7 @@ else:
             first_df_key = list(dataframes.keys())[0]
             print(f"\nExample merge with first file: '{first_df_key}'")
             
-            original_df = dataframes[first_df_key]
+            original_df = dataframes[first_df_key].copy() # Use .copy() to avoid SettingWithCopyWarning
             date_col = original_df.columns[0]
             
             # Parse dates and set as index (this time on the original df)
@@ -111,10 +111,45 @@ else:
             print(merged_df.head())
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching weather data: {e}")
+        print(f"Error fetching historical weather data: {e}")
     except json.JSONDecodeError:
-        print("Error: Could not decode JSON response from weather API.")
+        print("Error: Could not decode JSON response from historical weather API.")
     except Exception as e:
-        print(f"An error occurred during weather processing: {e}")
+        print(f"An error occurred during historical weather processing: {e}")
+
+    # --- 4. Fetching Today's Weather ---
+    print("\n--- 4. Fetching Today's Weather ---")
+    print("Fetching current temperature from Open-Meteo Forecast API...")
+    
+    FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast"
+    forecast_params = {
+        "latitude": 39.95,  # Philadelphia
+        "longitude": -75.16, # Philadelphia
+        "current": "temperature_2m",
+        "timezone": "America/New_York" # Use a specific timezone for consistency
+    }
+
+    try:
+        response = requests.get(FORECAST_API_URL, params=forecast_params)
+        response.raise_for_status()
+        today_weather = response.json()
+        
+        current_temp = today_weather.get('current', {}).get('temperature_2m')
+        current_time = today_weather.get('current', {}).get('time')
+        
+        if current_temp is not None and current_time is not None:
+            print(f"Successfully fetched current weather:")
+            print(f"  - Time: {current_time}")
+            print(f"  - Temperature: {current_temp}°C")
+        else:
+            print("Error: 'current' or 'temperature_2m' not found in forecast response.")
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching current weather data: {e}")
+    except json.JSONDecodeError:
+        print("Error: Could not decode JSON response from forecast API.")
+    except Exception as e:
+        print(f"An error occurred during current weather processing: {e}")
+
 
 print("\n--- Python script execution finished. ---")
