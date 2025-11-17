@@ -9,13 +9,14 @@ import time # To prevent API rate limiting
 # --- Configuration ---
 # A map of PJM zones to their representative locations and timezones.
 ZONE_LOCATIONS = {
-    # Original Zones
+    # Original Major Zones
     "COMED": {"lat": 41.88, "lon": -87.63, "timezone": "America/Chicago"}, # Commonwealth Edison (Chicago, IL)
     "PSEG": {"lat": 40.73, "lon": -74.17, "timezone": "America/New_York"}, # Public Service Electric and Gas (Newark, NJ)
     "DOM": {"lat": 37.54, "lon": -77.43, "timezone": "America/New_York"}, # Dominion Virginia Power (Richmond, VA)
     "BGE": {"lat": 39.29, "lon": -76.61, "timezone": "America/New_York"}, # Baltimore Gas & Electric (Baltimore, MD)
-    "PEPCO": {"lat": 38.91, "lon": -77.04, "timezone": "America/New_York"}, # Potomac Electric Power Company (Washington, D.C.)
     "AEP": {"lat": 39.96, "lon": -83.00, "timezone": "America/New_York"}, # American Electric Power (Columbus, OH - General)
+
+    # --- Full 29 Zone List ---
     "AECO": {"lat": 39.36, "lon": -74.42, "timezone": "America/New_York"},   # Atlantic City Electric (Atlantic City, NJ)
     "AEPAPT": {"lat": 37.27, "lon": -79.94, "timezone": "America/New_York"}, # AEP Appalachian Power (Roanoke, VA)
     "AEPIMP": {"lat": 41.08, "lon": -85.14, "timezone": "America/Indiana/Indianapolis"}, # AEP Indiana Michigan Power (Fort Wayne, IN)
@@ -35,7 +36,15 @@ ZONE_LOCATIONS = {
     "OE": {"lat": 41.08, "lon": -81.52, "timezone": "America/New_York"},     # Ohio Edison (Akron, OH)
     "OVEC": {"lat": 39.06, "lon": -83.01, "timezone": "America/New_York"},   # Ohio Valley Electric Corporation (Piketon, OH)
     "PAPWR": {"lat": 40.61, "lon": -75.49, "timezone": "America/New_York"},  # PPL (Pennsylvania Power & Light) (Allentown, PA)
-    "PE": {"lat": 39.95, "lon": -75.16, "timezone": "America/New_York"}      # Alias for PECO (Philadelphia, PA)
+    "PE": {"lat": 39.95, "lon": -75.16, "timezone": "America/New_York"},     # Alias for PECO (Philadelphia, PA)
+    "PEPCO": {"lat": 38.91, "lon": -77.04, "timezone": "America/New_York"},  # Potomac Electric Power Company (Washington, D.C.)
+    "PLCO": {"lat": 40.61, "lon": -75.49, "timezone": "America/New_York"},   # PPL Electric Utilities (Allentown, PA) - Alias for PAPWR
+    "PN": {"lat": 42.13, "lon": -80.09, "timezone": "America/New_York"},     # Penelec (Pennsylvania Electric Co) (Erie, PA)
+    "PS": {"lat": 40.73, "lon": -74.17, "timezone": "America/New_York"},     # Public Service Electric and Gas (Newark, NJ) - Alias for PSEG
+    "RECO": {"lat": 41.09, "lon": -74.05, "timezone": "America/New_York"},   # Rockland Electric Company (Spring Valley, NY)
+    "SMECO": {"lat": 38.52, "lon": -76.80, "timezone": "America/New_York"},  # Southern Maryland Electric Cooperative (Hughesville, MD)
+    "UGI": {"lat": 41.25, "lon": -75.88, "timezone": "America/New_York"},    # UGI Utilities (Wilkes-Barre, PA)
+    "VMEU": {"lat": 39.49, "lon": -75.03, "timezone": "America/New_York"}    # Vineland Municipal Electric Utility (Vineland, NJ)
 }
 # --- End of Configuration ---
 
