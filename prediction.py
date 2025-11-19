@@ -300,6 +300,7 @@ def main():
 
     all_zone_daily_loads = []
     all_zone_peak_hours = []
+    all_zone_top_two_days = []
 
     # Define the reference date here (November 11, 2025)
     reference_date = datetime(2025, 11, 17).date()
@@ -354,18 +355,25 @@ def main():
 
             forecast_res = results.get_forecast(steps=steps, exog=exog_future)
             mean_forecast = forecast_res.predicted_mean
-            print("mean_forecast", mean_forecast)
 
-            #last_24 = np.asarray(mean_forecast[-24:])
             last_24 = mean_forecast.iloc[-(24*10):-(24*9)]
-            print("last_24", last_24)
+            #print("last_24", last_24)
             daily_loads_int = np.rint(last_24).astype(int).tolist()
             all_zone_daily_loads.append(daily_loads_int)
             peak_hour = int(last_24.argmax())
             all_zone_peak_hours.append(peak_hour)
+
+            top_two = np.zeros(10)
+            daily_mean = mean_forecast.values.reshape(-1, 24).mean(axis=-1)[-10:]
+            print(daily_mean)
+            top_two[np.argsort(daily_mean)[::-1][:2]] = 1
+            print(top_two)
+            all_zone_top_two_days.append(top_two[0])
+
         except Exception:
             all_zone_daily_loads.append([-1]*24)
             all_zone_peak_hours.append(-1)
+            all_zone_top_two_days.append(-1)
 
     fields = []
     fields.append(f'"{today_str}"')
@@ -373,6 +381,8 @@ def main():
         fields.extend(str(int(x)) for x in loads)
     for ph in all_zone_peak_hours:
         fields.append(str(int(ph)))
+    for pd in all_zone_top_two_days:
+        fields.append(str(int(pd)))
 
     print(",".join(fields))
 
