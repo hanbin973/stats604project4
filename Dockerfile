@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl \
     tar \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a conda environment and install all packages in one go.
@@ -44,6 +45,13 @@ RUN echo "Unzipping main zip file..." \
     && echo "Data extraction complete."
 # --- End of Your Original Data ---
 
+# Copy manually-downloaded November 2025 data <<<
+# Assuming data_nov2025/ is in the same directory as Dockerfile
+COPY data_nov2025 /app/data/data_nov2025
+#COPY output /app/output
+#COPY models /app/models
+#COPY temperature /app/temperature
+
 
 # --- Weather Download Removed ---
 # We no longer download a static weather.json file here.
@@ -52,7 +60,11 @@ RUN echo "Unzipping main zip file..." \
 
 # Copy the Python script into the container's working directory
 COPY load_data.py .
+RUN python load_data.py
+COPY fitting.py .
+COPY prediction.py .
+COPY Makefile .
 
 # Set the default command to run when the container starts
 # Use the "shell" form (no []) so it respects the SHELL directive above
-CMD python load_data.py
+CMD python prediction.py
