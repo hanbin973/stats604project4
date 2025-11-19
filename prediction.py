@@ -165,21 +165,22 @@ def fetch_live_weather_for_zone(zone, reference_date=None):
         df = df.rename(columns={"temperature_2m": "temp_at_time_t"})
         
         # Create the lag/lead features required by the model
-        df["temp_at_time_t_minus_24h"] = df["temp_at_time_t"].shift(24)
-        df["temp_at_time_t_minus_48h"] = df["temp_at_time_t"].shift(48)
-        df["temp_at_time_t_plus_24h_FORECAST"] = df["temp_at_time_t"].shift(-24)
+        #df["temp_at_time_t_minus_24h"] = df["temp_at_time_t"].shift(24)
+        #df["temp_at_time_t_minus_48h"] = df["temp_at_time_t"].shift(48)
+        #df["temp_at_time_t_plus_24h_FORECAST"] = df["temp_at_time_t"].shift(-24)
 
         # Filter for today (local zone time)
-        today_str = datetime.now(tz).strftime("%Y-%m-%d")
+        #today_str = datetime.now(tz).strftime("%Y-%m-%d")
 
-        today_mask = df.index.strftime("%Y-%m-%d") == today_str
+        #today_mask = df.index.strftime("%Y-%m-%d") == today_str
         
-        if not any(today_mask):
-             print(f"!!! FLAG: Weather information absent for today's date ({today_str}) for zone {zone} !!!")
-             return None
+        #if not any(today_mask):
+        #     print(f"!!! FLAG: Weather information absent for today's date ({today_str}) for zone {zone} !!!")
+        #     return None
         
         # Return only the 24 hours for today
-        return df.loc[today_mask].copy()
+        # return df.loc[today_mask].copy()
+        return df
 
     except Exception as e:
         print(f"!!! FLAG: Exception occurred fetching weather for zone {zone}: {e}")
@@ -330,6 +331,8 @@ def main():
         # Pass a reference_date if you have one, otherwise it defaults to None
         # Example: reference_date = datetime(2025, 10, 1).date()
         weather_df = fetch_live_weather_for_zone(zone, reference_date=reference_date)
+        print(weather_df.head())
+        print(weather_df.tail())
         
         # Rate limiting
         time.sleep(0.2) 
