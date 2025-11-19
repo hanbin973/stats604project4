@@ -354,8 +354,11 @@ def main():
 
             forecast_res = results.get_forecast(steps=steps, exog=exog_future)
             mean_forecast = forecast_res.predicted_mean
+            print("mean_forecast", mean_forecast)
 
-            last_24 = np.asarray(mean_forecast[-24:])
+            #last_24 = np.asarray(mean_forecast[-24:])
+            last_24 = mean_forecast.iloc[-(24*10):-(24*9)]
+            print("last_24", last_24)
             daily_loads_int = np.rint(last_24).astype(int).tolist()
             all_zone_daily_loads.append(daily_loads_int)
             peak_hour = int(last_24.argmax())
