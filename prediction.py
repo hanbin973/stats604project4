@@ -143,7 +143,7 @@ def fetch_live_weather_for_zone(zone, reference_date=None):
         "longitude": info["lon"],
         "hourly": "temperature_2m",
         "past_days": past_days,
-        "forecast_days": 2,
+        "forecast_days": 16,
         "timezone": info["timezone"]
     }
 
