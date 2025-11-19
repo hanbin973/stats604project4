@@ -136,7 +136,7 @@ def fetch_live_weather_for_zone(zone, reference_date=None):
         
         # Formula: 2 + (current - reference)
         # Ensure we don't send negative days to API if reference is in future
-        past_days = max(2, 2 + days_diff)
+        past_days = max(0, days_diff)
 
     params = {
         "latitude": info["lat"],
@@ -270,9 +270,9 @@ def build_exog_from_weather(weather_df, today_local):
         weather_df = weather_df.sort_values("time").reset_index(drop=True)
     temps = weather_df["temp_at_time_t"].to_numpy().T.flatten()
     df_temp = pd.DataFrame({"temp": temps})
-    df_temp["datetime"] = weather_df["time"]
-    df_temp["CDH"] = (df_temp["temp"] - TBASE).clip(lower=0)
-    df_temp["HDH"] = (TBASE - df_temp["temp"]).clip(lower=0)
+    df_temp["datetime"] = weather_df.index
+    df_temp["CDH"] = (df_temp["temp"] - TBASE).clip(lower=0).values
+    df_temp["HDH"] = (TBASE - df_temp["temp"]).clip(lower=0).values
     df_temp["dow"] = df_temp["datetime"].dt.dayofweek
     df_temp = pd.get_dummies(df_temp, columns=["dow"], prefix="dow", dtype=float, drop_first=True)
     exog_cols = ["CDH", "HDH", "dow_1", "dow_2", "dow_3", "dow_4", "dow_5", "dow_6"]
@@ -302,7 +302,7 @@ def main():
     all_zone_peak_hours = []
 
     # Define the reference date here (November 11, 2025)
-    reference_date = datetime(2025, 11, 19).date()
+    reference_date = datetime(2025, 11, 17).date()
 
     for zone in zones:
         param_path = os.path.join(MODELS_DIR, f"{zone}_params.npy")
@@ -347,17 +347,13 @@ def main():
                 enforce_invertibility=False,
             )
             results = model.filter(params)
-            print(weather_df.head())
-            print(weather_df.tail())
             exog_future = build_exog_from_weather(weather_df, now_local)
-            print(exog_future.shape)
             
             exog_future = exog_future[exog_cols]
             steps = len(exog_future)
 
             forecast_res = results.get_forecast(steps=steps, exog=exog_future)
-            print(mean_forecast)
-
+            mean_forecast = forecast_res.predicted_mean
 
             last_24 = np.asarray(mean_forecast[-24:])
             daily_loads_int = np.rint(last_24).astype(int).tolist()
