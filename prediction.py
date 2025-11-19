@@ -99,10 +99,18 @@ def get_today_str():
     now = datetime.now(tz)
     return now.strftime("%Y-%m-%d"), now
 
-def fetch_live_weather_for_zone(zone):
+def fetch_live_weather_for_zone(zone, reference_date=None):
     """
-    Fetches live weather data (past 2 days + forecast 2 days) directly from the API.
-    Returns a DataFrame tailored for the model's input (for the current day).
+    Fetches live weather data directly from the API.
+    
+    Args:
+        zone (str): The PJM zone identifier.
+        reference_date (date or datetime, optional): A reference date to calculate historical fetch window.
+                                                     past_days = 2 + (current_date - reference_date).
+                                                     If None, defaults to past_days = 2.
+    
+    Returns:
+        DataFrame: A DataFrame tailored for the model's input (for the current day).
     """
     if zone not in ZONE_LOCATIONS:
         return None
@@ -110,11 +118,31 @@ def fetch_live_weather_for_zone(zone):
     info = ZONE_LOCATIONS[zone]
     forecast_api_url = "https://api.open-meteo.com/v1/forecast"
     
+    # Determine current date in zone's timezone
+    tz = pytz.timezone(info["timezone"])
+    current_date_obj = datetime.now(tz).date()
+
+    # Calculate past_days dynamically
+    past_days = 2
+    if reference_date:
+        # Handle input being datetime vs date
+        if isinstance(reference_date, datetime):
+            ref_date = reference_date.date()
+        else:
+            ref_date = reference_date
+        
+        # Calculate difference in days
+        days_diff = (current_date_obj - ref_date).days
+        
+        # Formula: 2 + (current - reference)
+        # Ensure we don't send negative days to API if reference is in future
+        past_days = max(2, 2 + days_diff)
+
     params = {
         "latitude": info["lat"],
         "longitude": info["lon"],
         "hourly": "temperature_2m",
-        "past_days": 2,
+        "past_days": past_days,
         "forecast_days": 2,
         "timezone": info["timezone"]
     }
@@ -142,7 +170,6 @@ def fetch_live_weather_for_zone(zone):
         df["temp_at_time_t_plus_24h_FORECAST"] = df["temp_at_time_t"].shift(-24)
 
         # Filter for today (local zone time)
-        tz = pytz.timezone(info["timezone"])
         today_str = datetime.now(tz).strftime("%Y-%m-%d")
 
         today_mask = df.index.strftime("%Y-%m-%d") == today_str
@@ -293,11 +320,16 @@ def main():
     all_zone_daily_loads = []
     all_zone_peak_hours = []
 
+    # Define the reference date here (November 11, 2025)
+    reference_date = datetime(2025, 11, 11).date()
+
     for zone in zones:
         param_path = os.path.join(MODELS_DIR, f"{zone}_params.npy")
         
         # --- DIRECTLY FETCH LIVE WEATHER HERE ---
-        weather_df = fetch_live_weather_for_zone(zone)
+        # Pass a reference_date if you have one, otherwise it defaults to None
+        # Example: reference_date = datetime(2025, 10, 1).date()
+        weather_df = fetch_live_weather_for_zone(zone, reference_date=reference_date)
         
         # Rate limiting
         time.sleep(0.2) 
@@ -314,15 +346,13 @@ def main():
         df_zone = df_zone.dropna(subset=["mw"] + exog_cols)
         
         if df_zone.empty:
-            # --- ADDED DEBUG FLAG HERE ---
-            print(f"!!! FLAG: Training Data Missing for zone {zone}. Check historical load/weather data.")
+            # DEBUG FLAG for Empty Data
+            # print(f"!!! FLAG: Historical Data Missing for {zone}. Check merging in load_data.py")
             all_zone_daily_loads.append([-1]*24)
             all_zone_peak_hours.append(-1)
             continue
         
-        # Reset Index for SARIMAX (prevents ValueWarning/errors)
         df_zone = df_zone.reset_index(drop=True)
-
         y_train = df_zone["mw"]
         exog_train = df_zone[exog_cols]
 
