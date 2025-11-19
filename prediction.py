@@ -143,7 +143,7 @@ def fetch_live_weather_for_zone(zone, reference_date=None):
         "longitude": info["lon"],
         "hourly": "temperature_2m",
         "past_days": past_days,
-        "forecast_days": 16,
+        "forecast_days": 11,
         "timezone": info["timezone"]
     }
 
@@ -260,45 +260,25 @@ def prepare_training_data():
 
     return df, exog_cols
 
-
 def build_exog_from_weather(weather_df, today_local):
     """
-    Given a per-zone live weather DataFrame for 'today' (24 hours), 
+    Given a per-zone live weather DataFrame for 'today' (24 hours),
     build the 96-step exogenous matrix needed for the SARIMAX forecast.
     """
     if "time" in weather_df.columns:
         weather_df["time"] = pd.to_datetime(weather_df["time"])
         weather_df = weather_df.sort_values("time").reset_index(drop=True)
-
-    temp_cols = [
-        "temp_at_time_t_minus_48h",
-        "temp_at_time_t_minus_24h",
-        "temp_at_time_t",
-        "temp_at_time_t_plus_24h_FORECAST",
-    ]
-    
-    missing = [c for c in temp_cols if c not in weather_df.columns]
-    if missing:
-        raise ValueError(f"Live weather data missing columns: {missing}")
-
-    temps = weather_df[temp_cols].to_numpy().T.flatten()
+    temps = weather_df["temp_at_time_t"].to_numpy().T.flatten()
     df_temp = pd.DataFrame({"temp": temps})
-
-    today_00 = today_local.replace(hour=0, minute=0, second=0, microsecond=0)
-    start_time = today_00 - timedelta(days=2)
-    start_time = start_time.replace(tzinfo=None)
-
-    df_temp["datetime"] = pd.date_range(start=start_time, periods=len(df_temp), freq="h")
+    df_temp["datetime"] = weather_df["time"]
     df_temp["CDH"] = (df_temp["temp"] - TBASE).clip(lower=0)
     df_temp["HDH"] = (TBASE - df_temp["temp"]).clip(lower=0)
     df_temp["dow"] = df_temp["datetime"].dt.dayofweek
     df_temp = pd.get_dummies(df_temp, columns=["dow"], prefix="dow", dtype=float, drop_first=True)
-
     exog_cols = ["CDH", "HDH", "dow_1", "dow_2", "dow_3", "dow_4", "dow_5", "dow_6"]
     for col in exog_cols:
         if col not in df_temp.columns:
             df_temp[col] = 0.0
-
     return df_temp[exog_cols]
 
 
@@ -322,7 +302,7 @@ def main():
     all_zone_peak_hours = []
 
     # Define the reference date here (November 11, 2025)
-    reference_date = datetime(2025, 11, 11).date()
+    reference_date = datetime(2025, 11, 19).date()
 
     for zone in zones:
         param_path = os.path.join(MODELS_DIR, f"{zone}_params.npy")
@@ -331,8 +311,6 @@ def main():
         # Pass a reference_date if you have one, otherwise it defaults to None
         # Example: reference_date = datetime(2025, 10, 1).date()
         weather_df = fetch_live_weather_for_zone(zone, reference_date=reference_date)
-        print(weather_df.head())
-        print(weather_df.tail())
         
         # Rate limiting
         time.sleep(0.2) 
@@ -369,13 +347,17 @@ def main():
                 enforce_invertibility=False,
             )
             results = model.filter(params)
+            print(weather_df.head())
+            print(weather_df.tail())
             exog_future = build_exog_from_weather(weather_df, now_local)
+            print(exog_future.shape)
             
             exog_future = exog_future[exog_cols]
             steps = len(exog_future)
 
             forecast_res = results.get_forecast(steps=steps, exog=exog_future)
-            mean_forecast = forecast_res.predicted_mean
+            print(mean_forecast)
+
 
             last_24 = np.asarray(mean_forecast[-24:])
             daily_loads_int = np.rint(last_24).astype(int).tolist()
